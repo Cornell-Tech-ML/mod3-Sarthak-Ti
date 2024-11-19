@@ -27,6 +27,8 @@ Size: 256
 
 We can also visualize it with a plot
 
+![timing_simple](https://github.com/user-attachments/assets/b1793027-33b3-4f34-9a5c-32261c3adc9c)
+
 ### gpu vs fast
 I also then compared Fastops to gpu, and you see a sizable speedup, especially as matrices get larger. This might be partially due to the way we only parallelize the fast backend over batches of which the size is 2. However, in general we would expect the GPU to get faster as we get larger, but we are both underutilizing the GPU and not fully utilizing the CPU, so we could optimize both still and it's unclear what the speedup would be, but this relatively naive implementation shows the differences that can be achieved. Also the reason gpu is slower for smaller tensors is because we have to transfer data to the GPU.
 ```console
@@ -49,6 +51,8 @@ Size: 1024
 ```
 
 Here is the plots comparing them.
+
+![timing](https://github.com/user-attachments/assets/668da833-e0c5-40d8-b57b-56dac7b8f367)
 
 
 The tests were performed on an Nvidia A100 80GB compared to 8 CPU core
