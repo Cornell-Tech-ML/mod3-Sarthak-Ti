@@ -200,13 +200,23 @@ def tensor_map(
         # for k in range(MAX_DIMS):
         #     out_index[k] = 0
         #     in_index[k] = 0
-        if i < out_size:
-            to_index(i, out_shape, out_index)
-            broadcast_index(out_index, out_shape, in_shape, in_index)
-            in_position = index_to_position(in_index, in_strides)
+
+        # we don't care about blocks or anything, each thread can do it's own thing, just take one value, compute something, and put it in the output
+        if (
+            i < out_size
+        ):  # guard to make sure thread corresponds to a value in the matrix
+            to_index(i, out_shape, out_index)  # get the index of the output
+            broadcast_index(
+                out_index, out_shape, in_shape, in_index
+            )  # broadcast the index to the input
+            in_position = index_to_position(
+                in_index, in_strides
+            )  # get the position of the input and output with broadcasted index
             out_position = index_to_position(out_index, out_strides)
 
-            out[out_position] = fn(in_storage[in_position])
+            out[out_position] = fn(
+                in_storage[in_position]
+            )  # simply apply the function to the input and put it in the output
 
     return cuda.jit()(_map)  # type: ignore
 
@@ -248,8 +258,7 @@ def tensor_zip(
         b_index = cuda.local.array(MAX_DIMS, numba.int32)
         i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
 
-        # TODO: Implement for Task 3.3.
-        # raise NotImplementedError("Need to implement for Task 3.3")
+        # very similar to the map function, but take values from array a and b, broadcast to output then apply the function
         if i < out_size:
             to_index(i, out_shape, out_index)
             broadcast_index(out_index, out_shape, a_shape, a_index)
@@ -290,23 +299,24 @@ def _sum_practice(out: Storage, a: Storage, size: int) -> None:
     i = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
     pos = cuda.threadIdx.x
 
-    # TODO: Implement for Task 3.3.
-    # raise NotImplementedError("Need to implement for Task 3.3")
     # first we do the sum in each block, so basically do the tree in each block, then after the blocks, we sum along the block dimension
+    # first move data to the cache for the block to speed thigns up
     if i < size:
         cache[pos] = a[i]
     else:
         cache[pos] = 0
-    cuda.syncthreads()
-    stride = cuda.blockDim.x // 2
-    while stride > 0:
-        if pos < stride:
+    cuda.syncthreads()  # sync threads to make sure all threads have loaded the data and cache is fully loaded
+    stride = cuda.blockDim.x // 2  # start with half the block size
+    while stride > 0:  # just a while loop, could do a for loop
+        if pos < stride:  # only do the computation if the thread is within the stride
             cache[pos] += cache[
                 pos + stride
             ]  # think of this as a generalization of what I did in gpu puzzle 10!
-        stride = stride // 2
-        cuda.syncthreads()
-    if pos == 0:
+        stride = (
+            stride // 2
+        )  # nowo divide by 2 so that we apply the function on the partially reduced array
+        cuda.syncthreads()  # also have to sync so that we know have the partial reduction
+    if pos == 0:  # only write it out if it's the first thread
         out[cuda.blockIdx.x] = cache[0]
 
 
@@ -360,8 +370,6 @@ def tensor_reduce(
         out_pos = cuda.blockIdx.x
         pos = cuda.threadIdx.x
 
-        # TODO: Implement for Task 3.3.
-        # raise NotImplementedError("Need to implement for Task 3.3")
         # so the hard part will be reduction if the dim is None or not, then it's a bitharder. Use strategy in sum practice to do the reduction
         # first we determine along which dimension we are reducing and then assign blocks and threads accordingly
         # we are also given a reduce value which is nice so we know what to start with whether it's 0 or 1
@@ -372,7 +380,7 @@ def tensor_reduce(
         a_index = cuda.local.array(MAX_DIMS, numba.int32)
         to_index(out_pos, out_shape, out_index)
 
-        # Copy the output index to the input index
+        # Copy the output index to the input index, again to speed things up and not read from global memory
         for i in range(len(out_shape)):
             a_index[i] = out_index[i]
 
@@ -380,10 +388,14 @@ def tensor_reduce(
         reduce_dim_size = a_shape[reduce_dim]
         num_threads = cuda.blockDim.x
 
-        # Initialize accumulator with the identity value
+        # Initialize accumulator with the identity value. 0 for sum, but 1 for product
         acc = reduce_value
 
         # Each thread processes multiple elements along the reduce dimension
+        # basically, we loop through the reduce dimension and add the values to the accumulator
+        # so the 1 thread fully computes it's part of the reduction
+        # so if we have 4 threads, thread 0 does 0,4,8,12, thread 1 does 1,5,9,13, etc.
+        # the first partial reduction, then do the rest of the reduction (if necessary) like we did in the practice
         for idx in range(pos, reduce_dim_size, num_threads):
             a_index[reduce_dim] = idx
             a_pos = index_to_position(a_index, a_strides)
@@ -396,7 +408,7 @@ def tensor_reduce(
         # Synchronize threads within the block
         cuda.syncthreads()
 
-        # Perform reduction in shared memory
+        # Now finalize reduction using shared memory
         stride = num_threads // 2
         while stride > 0:
             cuda.syncthreads()
@@ -444,8 +456,6 @@ def _mm_practice(out: Storage, a: Storage, b: Storage, size: int) -> None:
 
     """
     BLOCK_DIM = 32
-    # TODO: Implement for Task 3.3.
-    # raise NotImplementedError("Need to implement for Task 3.3")
     # this is easy because size is < 32 which means we can do it in one block
 
     # however, getting it to read only each cell once is tricky... but we can read it into shared memory!
@@ -455,12 +465,12 @@ def _mm_practice(out: Storage, a: Storage, b: Storage, size: int) -> None:
     i = cuda.threadIdx.x
     j = cuda.threadIdx.y
 
-    if i < size and j < size:
-        shared_a[i, j] = a[i * size + j]
+    if i < size and j < size:  # guard against out of bounds
+        shared_a[i, j] = a[i * size + j]  # add it to shared memory
         shared_b[i, j] = b[i * size + j]
         cuda.syncthreads()
 
-        temp = 0
+        temp = 0  # now we can simply compute the full dot product, each thread computes one value
         for k in range(size):
             temp += shared_a[i, k] * shared_b[k, j]
         out[i * size + j] = temp
@@ -534,7 +544,6 @@ def _tensor_matrix_multiply(
     #    a) Copy into shared memory for a matrix.
     #    b) Copy into shared memory for b matrix
     #    c) Compute the dot produce for position c[i, j]
-    # TODO: Implement for Task 3.4.
 
     # The basic idea with this code is you are given a block that corresponds to a portion of the output matrix, and it's the same grid size as the output so you can map it 1-1
     # the key idea is you copy parts of a and b into the block, then loop through the parts of B that are necessary to compute those elements of C
@@ -589,9 +598,15 @@ def _tensor_matrix_multiply(
             # we simply compute part of the sum each time and so we can just keep adding to the temp variable
         cuda.syncthreads()
         # sync again after it's done because after this step we modify the shared memory again, and don't want to start modifying before all threads are done
+        # now loop thorugh to get the full value for a single output value in c for each thread!
 
-    out_index = batch * out_strides[0] + i * out_strides[1] + j
-    if i < out_shape[1] and j < out_shape[2]:
+    # now we have the data, it's just writing each thread's value to the output in global memory
+    out_index = (
+        batch * out_strides[0] + i * out_strides[1] + j
+    )  # get the index of the output, out will always be contiguous, but could multiply j by out_strides[2] if it's not
+    if (
+        i < out_shape[1] and j < out_shape[2]
+    ):  # guard to make sure it's only writing if it's in bounds
         out[out_index] = temp
 
 

@@ -10,6 +10,7 @@ import minitorch
 
 datasets = minitorch.datasets
 FastTensorBackend = minitorch.TensorBackend(minitorch.FastOps)
+SimpleBackend = minitorch.TensorBackend(minitorch.SimpleOps)
 if numba.cuda.is_available():
     GPUBackend = minitorch.TensorBackend(minitorch.CudaOps)
 
@@ -40,6 +41,7 @@ def default_log_fn(epoch: int, total_loss: float, correct: int, losses: Iterable
 # class TimerLogger:
 #     def __init__(self):
 #         self.last_time = time.time()  # Initialize as None
+#         self.epoch = 0
 
 #     def log(self, epoch: int, total_loss: float, correct: int, losses: Iterable[float]) -> None:
 #         """Logging function for timing the training.
@@ -61,9 +63,14 @@ def default_log_fn(epoch: int, total_loss: float, correct: int, losses: Iterable
 
 #         """
 #         elapsed_time = time.time() - self.last_time
+#         if epoch == 0:
+#             elapsed_time = 0.0
+#         else:
+#             elapsed_time = elapsed_time/(epoch - self.epoch)
+#         self.epoch = epoch
 #         print(
 #             f"Epoch {epoch} | Loss: {total_loss:.4f} | Correct: {correct} | "
-#             f"Time since last call: {elapsed_time:.2f}s"
+#             f"Average time per epoch: {elapsed_time:.4f}s"
 #         )
 #         self.last_time = time.time()  # Update last_time
 
@@ -209,14 +216,23 @@ if __name__ == "__main__":
     RATE = args.RATE
 
     #commented out because pyright really hates this and I can't get it to work without changing function signatures.
+    # if args.BACKEND == "gpu":
+    #     backend = GPUBackend
+    # elif args.BACKEND == "cpu":
+    #     backend = FastTensorBackend
+    # elif args.BACKEND == "simple":
+    #     backend = SimpleBackend
+    # else:
+    #     raise(ValueError(f"Unknown backend {args.BACKEND}"))
+
     # if args.TIME:
     #     timer = TimerLogger()
     #     FastTrain(
-    #         HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
+    #         HIDDEN, backend=backend
     #     ).train(data, RATE, log_fn=timer.log, max_epochs=args.MAX_EPOCHS)
     # else:
     #     FastTrain(
-    #         HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
+    #         HIDDEN, backend=backend
     #     ).train(data, RATE, log_fn=default_log_fn, max_epochs=args.MAX_EPOCHS)
 
     FastTrain(

@@ -539,6 +539,8 @@ def tensor_matrix_multiply(
         None : Fills in `out`
 
     """
+    # this is a slow implementation that doesn't use numba, so it's about as slow as you can be
+    # but it does let us do matmul, I manually verified several outputs and it seems similar to the
     a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0
     b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0
     batch_size = max(a_shape[0], b_shape[0])  # Broadcasting in batch dimension

@@ -6,12 +6,365 @@
 
 * Overview: https://minitorch.github.io/module3.html
 
+# parallel numba diagnostics
+I included the output of the parallel check function as specified in the instructions. Note that it talks about this allocation hoisting, but it is incorect, each thread needs its own buffer. I also verified that there are no actual race conditions by pausing one of the values and simply ahving it check the buffer which is unmodified by the others, so each core gets its own buffer. I asked in ed discussion about this allocation hoisting and was told it is not an issue/is ok.
+```console
+MAP
+
+================================================================================
+ Parallel Accelerator Optimizing:  Function tensor_map.<locals>._map,
+/data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (164)
+================================================================================
+
+
+Parallel loop listing for  Function tensor_map.<locals>._map, /data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (164)
+--------------------------------------------------------------------------------------------------------------------------|loop #ID
+    def _map(                                                                                                             |
+        out: Storage,                                                                                                     |
+        out_shape: Shape,                                                                                                 |
+        out_strides: Strides,                                                                                             |
+        in_storage: Storage,                                                                                              |
+        in_shape: Shape,                                                                                                  |
+        in_strides: Strides,                                                                                              |
+    ) -> None:                                                                                                            |
+        # TODO: Implement for Task 3.1.                                                                                   |
+        # raise NotImplementedError("Need to implement for Task 3.1")                                                     |
+        # Ensure that in_shape is smaller than or equal to out_shape dimensions                                           |
+        assert len(in_shape) <= len(                                                                                      |
+            out_shape                                                                                                     |
+        ), "in_shape must be smaller than out_shape"                                                                      |
+        strides_aligned = np.array_equal(out_strides, in_strides) and np.array_equal(                                     |
+            out_shape, in_shape                                                                                           |
+        )                                                                                                                 |
+                                                                                                                          |
+        # the first key idea is we check if the strides and the shapes are the same, if they are we can avoid indexing    |
+        # then we use prange to parallelize the loop                                                                      |
+        # regardless, the idea is find the index of the input, apply function and store in output                         |
+                                                                                                                          |
+        # Iterate over each element in `out` in parallel                                                                  |
+        # print(out.size)                                                                                                 |
+        if strides_aligned:                                                                                               |
+            # If strides are aligned, we can avoid indexing, simply apply the function                                    |
+            for i in prange(out.size):------------------------------------------------------------------------------------| #0
+                out[i] = fn(in_storage[i])                                                                                |
+        else:                                                                                                             |
+            for i in prange(out.size):  # using prange for parallel looping-----------------------------------------------| #1
+                out_index = np.empty(len(out_shape), dtype=np.int32)                                                      |
+                in_index = np.empty(len(in_shape), dtype=np.int32)                                                        |
+                # Get the multi-dimensional index for the current flat index `i`                                          |
+                to_index(i, out_shape, out_index)                                                                         |
+                                                                                                                          |
+                # Broadcast out_index to in_index based on the input shape                                                |
+                broadcast_index(out_index, out_shape, in_shape, in_index)                                                 |
+                                                                                                                          |
+                # Calculate flat positions in input and output based on strides                                           |
+                in_position = index_to_position(in_index, in_strides)                                                     |
+                out_position = index_to_position(out_index, out_strides)                                                  |
+                                                                                                                          |
+                # Apply the function and store the result in the output storage                                           |
+                out[out_position] = fn(in_storage[in_position])                                                           |
+--------------------------------- Fusing loops ---------------------------------
+Attempting fusion of parallel loops (combines loops with similar properties)...
+Following the attempted fusion of parallel for-loops there are 2 parallel for-
+loop(s) (originating from loops labelled: #0, #1).
+--------------------------------------------------------------------------------
+----------------------------- Before Optimisation ------------------------------
+--------------------------------------------------------------------------------
+------------------------------ After Optimisation ------------------------------
+Parallel structure is already optimal.
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+---------------------------Loop invariant code motion---------------------------
+Allocation hoisting:
+The memory allocation derived from the instruction at
+/data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (194) is hoisted
+out of the parallel loop labelled #1 (it will be performed before the loop is
+executed and reused inside the loop):
+   Allocation:: out_index = np.empty(len(out_shape), dtype=np.int32)
+    - numpy.empty() is used for the allocation.
+The memory allocation derived from the instruction at
+/data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (195) is hoisted
+out of the parallel loop labelled #1 (it will be performed before the loop is
+executed and reused inside the loop):
+   Allocation:: in_index = np.empty(len(in_shape), dtype=np.int32)
+    - numpy.empty() is used for the allocation.
+None
+ZIP
+
+================================================================================
+ Parallel Accelerator Optimizing:  Function tensor_zip.<locals>._zip,
+/data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (235)
+================================================================================
+
+
+Parallel loop listing for  Function tensor_zip.<locals>._zip, /data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (235)
+---------------------------------------------------------------------------------------------------------------------------|loop #ID
+    def _zip(                                                                                                              |
+        out: Storage,                                                                                                      |
+        out_shape: Shape,                                                                                                  |
+        out_strides: Strides,                                                                                              |
+        a_storage: Storage,                                                                                                |
+        a_shape: Shape,                                                                                                    |
+        a_strides: Strides,                                                                                                |
+        b_storage: Storage,                                                                                                |
+        b_shape: Shape,                                                                                                    |
+        b_strides: Strides,                                                                                                |
+    ) -> None:                                                                                                             |
+        # TODO: Implement for Task 3.1.                                                                                    |
+        # raise NotImplementedError("Need to implement for Task 3.1")                                                      |
+        strides_aligned = (                                                                                                |
+            np.array_equal(b_strides, a_strides)                                                                           |
+            and np.array_equal(a_shape, b_shape)                                                                           |
+            and np.array_equal(a_shape, out_shape)                                                                         |
+            and np.array_equal(out_shape, b_shape)                                                                         |
+            and np.array_equal(out_strides, a_strides)                                                                     |
+            and np.array_equal(out_strides, b_strides)                                                                     |
+        )                                                                                                                  |
+                                                                                                                           |
+        # exact same idea as tensor_map, we check if strides and shapes are the same, if they are we can avoid indexing    |
+        # and the only difference is have an a and b not just an a, so check all of those                                  |
+        # Then simply find a and b index, apply function and store in output                                               |
+                                                                                                                           |
+        if strides_aligned:                                                                                                |
+            # If strides are aligned, we can avoid indexing                                                                |
+            for i in prange(out.size):-------------------------------------------------------------------------------------| #2
+                out[i] = fn(a_storage[i], b_storage[i])                                                                    |
+        else:                                                                                                              |
+            for i in prange(out.size):-------------------------------------------------------------------------------------| #3
+                out_index = np.empty(len(out_shape), dtype=np.int32)                                                       |
+                a_index = np.empty(len(a_shape), dtype=np.int32)                                                           |
+                b_index = np.empty(len(b_shape), dtype=np.int32)                                                           |
+                # Get the multi-dimensional index for the current flat index `i`                                           |
+                to_index(i, out_shape, out_index)                                                                          |
+                                                                                                                           |
+                # Broadcast out_index to a_index and b_index based on their respective shapes                              |
+                broadcast_index(out_index, out_shape, a_shape, a_index)                                                    |
+                broadcast_index(out_index, out_shape, b_shape, b_index)                                                    |
+                                                                                                                           |
+                # Calculate flat positions in a, b, and output based on strides                                            |
+                a_position = index_to_position(a_index, a_strides)                                                         |
+                b_position = index_to_position(b_index, b_strides)                                                         |
+                out_position = index_to_position(out_index, out_strides)                                                   |
+                                                                                                                           |
+                # Apply the function element-wise on both input tensors and assign to output                               |
+                out[out_position] = fn(a_storage[a_position], b_storage[b_position])                                       |
+--------------------------------- Fusing loops ---------------------------------
+Attempting fusion of parallel loops (combines loops with similar properties)...
+Following the attempted fusion of parallel for-loops there are 2 parallel for-
+loop(s) (originating from loops labelled: #2, #3).
+--------------------------------------------------------------------------------
+----------------------------- Before Optimisation ------------------------------
+--------------------------------------------------------------------------------
+------------------------------ After Optimisation ------------------------------
+Parallel structure is already optimal.
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+---------------------------Loop invariant code motion---------------------------
+Allocation hoisting:
+The memory allocation derived from the instruction at
+/data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (267) is hoisted
+out of the parallel loop labelled #3 (it will be performed before the loop is
+executed and reused inside the loop):
+   Allocation:: out_index = np.empty(len(out_shape), dtype=np.int32)
+    - numpy.empty() is used for the allocation.
+The memory allocation derived from the instruction at
+/data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (268) is hoisted
+out of the parallel loop labelled #3 (it will be performed before the loop is
+executed and reused inside the loop):
+   Allocation:: a_index = np.empty(len(a_shape), dtype=np.int32)
+    - numpy.empty() is used for the allocation.
+The memory allocation derived from the instruction at
+/data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (269) is hoisted
+out of the parallel loop labelled #3 (it will be performed before the loop is
+executed and reused inside the loop):
+   Allocation:: b_index = np.empty(len(b_shape), dtype=np.int32)
+    - numpy.empty() is used for the allocation.
+None
+REDUCE
+
+================================================================================
+ Parallel Accelerator Optimizing:  Function tensor_reduce.<locals>._reduce,
+/data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (309)
+================================================================================
+
+
+Parallel loop listing for  Function tensor_reduce.<locals>._reduce, /data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (309)
+-----------------------------------------------------------------------------------------------------------------------------------|loop #ID
+    def _reduce(                                                                                                                   |
+        out: Storage,                                                                                                              |
+        out_shape: Shape,                                                                                                          |
+        out_strides: Strides,                                                                                                      |
+        a_storage: Storage,                                                                                                        |
+        a_shape: Shape,                                                                                                            |
+        a_strides: Strides,                                                                                                        |
+        reduce_dim: int,                                                                                                           |
+    ) -> None:                                                                                                                     |
+        # a bit more complex than map and zip, but we can still parallelize it for each output                                     |
+        # this means if do .reduce() without specifying a dimension it won't actually be parallel                                  |
+        # but if we have a 100x100 tensor and do .sum(0) it will parallelize across up to 100 cpu cores!                           |
+        # the basic ideas is we find the index of the output, then one core will fully compute that output and store it            |
+        # so in the 100x100 example, a core would take the first row, sum it and store it. each core does its own row              |
+                                                                                                                                   |
+        reduce_size = a_shape[reduce_dim]  # size of the dimension we are reducing                                                 |
+                                                                                                                                   |
+        assert len(out_shape) < MAX_DIMS, "out_shape must be less than MAX_DIMS"                                                   |
+                                                                                                                                   |
+        for i in prange(-----------------------------------------------------------------------------------------------------------| #4
+            len(out)                                                                                                               |
+        ):  # Parallelized loop, if output is 1 dimension doesn't actually parallelize, but if reduce along a dimension it will    |
+            out_index = np.empty(MAX_DIMS, dtype=np.int32)  # Index buffer for output                                              |
+            to_index(i, out_shape, out_index)  # get the index                                                                     |
+            base_position = index_to_position(                                                                                     |
+                out_index, out_strides                                                                                             |
+            )  # get the position of the value that will remain after reduction                                                    |
+                                                                                                                                   |
+            # Inner loop: use precomputed offsets for reduction                                                                    |
+            o = index_to_position(out_index, out_strides)                                                                          |
+            result = out[o]  # Identity for the reduction, 0 for sum, 1 for product                                                |
+            out_index[reduce_dim] = 0  # initialize to 0                                                                           |
+            temp_position = index_to_position(                                                                                     |
+                out_index, a_strides                                                                                               |
+            )  # the starting position of the values to reduce                                                                     |
+            for s in range(reduce_size):                                                                                           |
+                result = fn(                                                                                                       |
+                    result, float(a_storage[temp_position + s * a_strides[reduce_dim]])                                            |
+                )  # apply the function to the result and the next value and keep applying it until it's done                      |
+                                                                                                                                   |
+            out[base_position] = result                                                                                            |
+--------------------------------- Fusing loops ---------------------------------
+Attempting fusion of parallel loops (combines loops with similar properties)...
+Following the attempted fusion of parallel for-loops there are 1 parallel for-
+loop(s) (originating from loops labelled: #4).
+--------------------------------------------------------------------------------
+----------------------------- Before Optimisation ------------------------------
+--------------------------------------------------------------------------------
+------------------------------ After Optimisation ------------------------------
+Parallel structure is already optimal.
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+---------------------------Loop invariant code motion---------------------------
+Allocation hoisting:
+The memory allocation derived from the instruction at
+/data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (331) is hoisted
+out of the parallel loop labelled #4 (it will be performed before the loop is
+executed and reused inside the loop):
+   Allocation:: out_index = np.empty(MAX_DIMS, dtype=np.int32)  # Index buffer
+for output
+    - numpy.empty() is used for the allocation.
+None
+MATRIX MULTIPLY
+
+================================================================================
+ Parallel Accelerator Optimizing:  Function _tensor_matrix_multiply,
+/data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (354)
+================================================================================
+
+
+Parallel loop listing for  Function _tensor_matrix_multiply, /data1/lesliec/sarthak/mod3-Sarthak-Ti/minitorch/fast_ops.py (354)
+-------------------------------------------------------------------------------------------------------------------------------------------|loop #ID
+def _tensor_matrix_multiply(                                                                                                               |
+    out: Storage,                                                                                                                          |
+    out_shape: Shape,                                                                                                                      |
+    out_strides: Strides,                                                                                                                  |
+    a_storage: Storage,                                                                                                                    |
+    a_shape: Shape,                                                                                                                        |
+    a_strides: Strides,                                                                                                                    |
+    b_storage: Storage,                                                                                                                    |
+    b_shape: Shape,                                                                                                                        |
+    b_strides: Strides,                                                                                                                    |
+) -> None:                                                                                                                                 |
+    """NUMBA tensor matrix multiply function.                                                                                              |
+                                                                                                                                           |
+    Should work for any tensor shapes that broadcast as long as                                                                            |
+                                                                                                                                           |
+    ```                                                                                                                                    |
+    assert a_shape[-1] == b_shape[-2]                                                                                                      |
+    ```                                                                                                                                    |
+                                                                                                                                           |
+    Optimizations:                                                                                                                         |
+                                                                                                                                           |
+    * Outer loop in parallel                                                                                                               |
+    * No index buffers or function calls                                                                                                   |
+    * Inner loop should have no global writes, 1 multiply.                                                                                 |
+                                                                                                                                           |
+                                                                                                                                           |
+    Args:                                                                                                                                  |
+    ----                                                                                                                                   |
+        out (Storage): storage for `out` tensor                                                                                            |
+        out_shape (Shape): shape for `out` tensor                                                                                          |
+        out_strides (Strides): strides for `out` tensor                                                                                    |
+        a_storage (Storage): storage for `a` tensor                                                                                        |
+        a_shape (Shape): shape for `a` tensor                                                                                              |
+        a_strides (Strides): strides for `a` tensor                                                                                        |
+        b_storage (Storage): storage for `b` tensor                                                                                        |
+        b_shape (Shape): shape for `b` tensor                                                                                              |
+        b_strides (Strides): strides for `b` tensor                                                                                        |
+                                                                                                                                           |
+    Returns:                                                                                                                               |
+    -------                                                                                                                                |
+        None : Fills in `out`                                                                                                              |
+                                                                                                                                           |
+    """                                                                                                                                    |
+    # these simply let us know the strides for the batch, i, j, k                                                                          |
+    # the i is the row, j is the column, k is the inner dimension that is shared between a and b                                           |
+    a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0                                                                                 |
+    b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0                                                                                 |
+    a_i_stride = a_strides[1] if a_shape[1] > 1 else 0                                                                                     |
+    b_j_stride = b_strides[2] if b_shape[2] > 1 else 0                                                                                     |
+    a_k_stride = a_strides[2] if a_shape[2] > 1 else 0                                                                                     |
+    b_k_stride = b_strides[1] if b_shape[1] > 1 else 0                                                                                     |
+    # batch_max = max(a_shape[0], b_shape[0])                                                                                              |
+                                                                                                                                           |
+    # we have to do loops like this because we can't have index buffers                                                                    |
+    # also parallelizing over the batch dimension doesn't speed up a large matrix multiply, only when have many batches                    |
+    # the basic idea here is we take a batch and assign it to a core. Then each core simply computes the matrix multiply for that batch    |
+    for b in prange(out_shape[0]):---------------------------------------------------------------------------------------------------------| #5
+        # now we iterate over the other dimensions, pretend we have 2 2x2 matrices                                                         |
+        for i in range(out_shape[1]):  # basic matrix multiply loop                                                                        |
+            for j in range(out_shape[2]):                                                                                                  |
+                tmp = 0.0                                                                                                                  |
+                # we also calculate the indices so we don't have to do multiplies in the for loop which only allows 1 multiply             |
+                a_index = b * a_batch_stride + i * a_i_stride                                                                              |
+                b_index = b * b_batch_stride + j * b_j_stride                                                                              |
+                for k in range(a_shape[-1]):                                                                                               |
+                    tmp += a_storage[a_index] * b_storage[b_index]                                                                         |
+                    a_index += a_k_stride  # add the indices so we don't have to multiply, basically moves by the stride dimensions        |
+                    b_index += b_k_stride                                                                                                  |
+                                                                                                                                           |
+                out_index = (                                                                                                              |
+                    b * out_strides[0] + i * out_strides[1] + j * out_strides[2]                                                           |
+                )  # now find the out index and write it out                                                                               |
+                out[out_index] = tmp                                                                                                       |
+                # now loop and find the next element. compute the full product and move on!!                                               |
+                                                                                                                                           |
+    return None                                                                                                                            |
+--------------------------------- Fusing loops ---------------------------------
+Attempting fusion of parallel loops (combines loops with similar properties)...
+Following the attempted fusion of parallel for-loops there are 1 parallel for-
+loop(s) (originating from loops labelled: #5).
+--------------------------------------------------------------------------------
+----------------------------- Before Optimisation ------------------------------
+--------------------------------------------------------------------------------
+------------------------------ After Optimisation ------------------------------
+Parallel structure is already optimal.
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+---------------------------Loop invariant code motion---------------------------
+Allocation hoisting:
+No allocation hoisting found
+None
+```
+
 
 # Matmul speed plot
 I used code from Hashim Hayat and Justin Chiu to run this.
 
 ### fast vs slow
-First I compared simple ops to fast, but the scale of speeds is so far apart it's hard to see the fast compared to the slow, and it would take hours for 1024, so I only compared up to 256 size matrices. Note that in terms of parallelization, the only part of the Fast implementation that is parallel is along the batch dimension, and we only did it with a batch size of 2. But we still see noticeable speedups because we use numba loops which are much faster than python for loops. On top of that things are compiled, so you will still see substantial improvements even with a batch size of 1. But if we have larger batch sizes it would be even faster.
+First I compared simple ops to fast, but the scale of speeds is so far apart it's hard to see the fast compared to the slow, and it would take hours for 1024, so I only compared up to 256 size matrices. Note that in terms of parallelization, the only part of the Fast implementation that is parallel is along the batch dimension, and we only did it with a batch size of 2. But we still see noticeable speedups because we use numba loops which are much faster than python for loops. On top of that things are compiled, so you will still see substantial improvements even with a batch size of 1. But if we have larger batch sizes it would be even faster. Note that in this case size means one dimension of the matrix, so total size is 64x64 for the first matrix, 256x256 for the third one etc.
 ```console
 Timing summary
 Size: 64
@@ -30,7 +383,7 @@ We can also visualize it with a plot
 ![timing_simple](https://github.com/user-attachments/assets/b1793027-33b3-4f34-9a5c-32261c3adc9c)
 
 ### gpu vs fast
-I also then compared Fastops to gpu, and you see a sizable speedup, especially as matrices get larger. This might be partially due to the way we only parallelize the fast backend over batches of which the size is 2. However, in general we would expect the GPU to get faster as we get larger, but we are both underutilizing the GPU and not fully utilizing the CPU, so we could optimize both still and it's unclear what the speedup would be, but this relatively naive implementation shows the differences that can be achieved. Also the reason gpu is slower for smaller tensors is because we have to transfer data to the GPU.
+I also then compared Fastops to gpu, and you see a sizable speedup, especially as matrices get larger. This might be partially due to the way we only parallelize the fast backend over batches of which the size is 2. However, in general we would expect the GPU to get faster as we get larger, but we are both underutilizing the GPU and not fully utilizing the CPU, so we could optimize both still and it's unclear what the speedup would be, but this relatively naive implementation shows the differences that can be achieved. Also the reason gpu is slower for smaller tensors is because we have to transfer data to the GPU. But as they get larger you see the speedup you get from gpu
 ```console
 Timing summary
 Size: 64
@@ -55,10 +408,10 @@ Here is the plots comparing them.
 ![timing](https://github.com/user-attachments/assets/668da833-e0c5-40d8-b57b-56dac7b8f367)
 
 
-The tests were performed on an Nvidia A100 80GB compared to 8 CPU core
+The tests were performed on an Nvidia A100 80GB compared to 8 Intel(R) Xeon(R) Platinum 8462Y+ CPU core
 
 # 3.5
-All tests were performed on a Nvidia A100 80GB compared to 8 CPU cores
+All tests were performed on a Nvidia A100 80GB compared to 8 Intel(R) Xeon(R) Platinum 8462Y+ CPU cores
 
 took about .92 s per epoch for the GPU and 0.12 s per epoch for the CPU. The CPU was faster because we had many cores, and we used all 8. The GPU seems slow because we aren't properly utilizing all the cores. I'm also using a fast HPC for this testing, which means the CPU has substantial memory benefits. When I benchmarked this on my local laptop, I saw the GPU was about 1.1 s but the CPU was closer to 2 s. Part of this is we don't have to transfer data to the CPU which is a heavy slowdown as the weights are not on th eGPU and constantly get trasnferred over and numba complains about it.
 ## simple dataset
@@ -398,60 +751,68 @@ Epoch  490  loss  1.1276323386462963 correct 50
 
 
 ## Benchmarking large model
-I used a hidden layer size of 1000, I modified the trainer to also print the time for the 10 epochs, and only trained for 200 epochs on xor dataset
+I used a hidden layer size of 1000, I modified the trainer to also print the average time for the last 10 epochs, and only trained for 200 epochs on the simple dataset
 
-For this test I used an A100 80 GB GPU and 8 CPU cores on the IRIS cluster at MSK. PArt of the issue with the speed is that we don't use most of the GPU, numba keeps giving performance warnings, but use of that is outside of my control. Also we don't transfer data to the GPU which means we constantly transfer between GPU and CPU which is very slow! Finally, the IRIS cluster has reallyy fast CPU memory access but it's much slower for the GPU, so these constant read and writes will be significant slowdowns, but even then, it's very fast. IF it was on the GPU we'd see heavy speed increases as we see in the large matmul operations which are slow because
+For this test I used an A100 80 GB GPU and 8 Intel(R) Xeon(R) Platinum 8462Y+ CPU cores on the IRIS cluster at MSK. Part of the issue with the speed is that we don't use most of the GPU, numba keeps giving performance warnings, but use of that is outside of my control. Also we don't transfer data to the GPU which means we constantly transfer between GPU and CPU which is very slow! Finally, the IRIS cluster has reallyy fast CPU memory access but it's much slower for the GPU, so these constant read and writes will be significant slowdowns, but even then, it's very fast. IF it was on the GPU we'd see heavy speed increases as we see in the large matmul operations which are slow because there's a lot of operations, here the major slowdown is the transferring between cpu and gpu memory.
 
 We also see that the GPU doesn't slow down much compared to the CPU when we go from hidden size 100 to 1000. The slowdown for the CPU is like a factor of 100, but for the GPU is barely 2x, becaukse the main bottleneck was transferring data, not the calculations. We can see this with the benchmarking on the matmul where massive matrices were much faster for th eGPU because once the data was transferred over, the one operation was very quick!
 ### CPU
-Averaged less than 2s per epoch. EAch print tells you the time between calls and since each call is 10 epochs, the timne between epochs being less than 20 implies it's faster than 10 s.
+Averaged about 1.17 s per epoch. Each print tells you the average time of the last 10 epochs
 ```console
-Epoch 0 | Loss: 575.6463 | Correct: 26 | Time since last call: NaN
-Epoch 10 | Loss: 76.6751 | Correct: 43 | Time since last call: 19.76s
-Epoch 20 | Loss: 0.3261 | Correct: 47 | Time since last call: 19.72s
-Epoch 30 | Loss: 0.0565 | Correct: 48 | Time since last call: 19.71s
-Epoch 40 | Loss: 2.2168 | Correct: 45 | Time since last call: 19.75s
-Epoch 50 | Loss: 0.1740 | Correct: 50 | Time since last call: 19.79s
-Epoch 60 | Loss: 0.0411 | Correct: 50 | Time since last call: 19.77s
-Epoch 70 | Loss: 0.6611 | Correct: 50 | Time since last call: 19.80s
-Epoch 80 | Loss: 0.8915 | Correct: 49 | Time since last call: 19.73s
-Epoch 90 | Loss: 0.1637 | Correct: 49 | Time since last call: 19.76s
-Epoch 100 | Loss: 0.0540 | Correct: 46 | Time since last call: 19.77s
-Epoch 110 | Loss: 0.5228 | Correct: 50 | Time since last call: 19.75s
-Epoch 120 | Loss: 0.0070 | Correct: 50 | Time since last call: 19.79s
-Epoch 130 | Loss: 0.9954 | Correct: 47 | Time since last call: 19.76s
-Epoch 140 | Loss: 0.0086 | Correct: 50 | Time since last call: 19.79s
-Epoch 150 | Loss: 0.4423 | Correct: 50 | Time since last call: 19.81s
-Epoch 160 | Loss: 0.7900 | Correct: 49 | Time since last call: 19.79s
-Epoch 170 | Loss: 0.0093 | Correct: 50 | Time since last call: 19.78s
-Epoch 180 | Loss: 0.0102 | Correct: 50 | Time since last call: 19.82s
-Epoch 190 | Loss: 0.3353 | Correct: 50 | Time since last call: 19.79s
+Epoch 0 | Loss: 131.9095 | Correct: 32 | Average time per epoch: 0.0000s
+Epoch 10 | Loss: 1.2593 | Correct: 38 | Average time per epoch: 1.1683s
+Epoch 20 | Loss: 1.6557 | Correct: 42 | Average time per epoch: 1.1647s
+Epoch 30 | Loss: 0.1249 | Correct: 50 | Average time per epoch: 1.1680s
+Epoch 40 | Loss: 0.0107 | Correct: 50 | Average time per epoch: 1.1709s
+Epoch 50 | Loss: 0.4487 | Correct: 49 | Average time per epoch: 1.1735s
+Epoch 60 | Loss: 0.4647 | Correct: 50 | Average time per epoch: 1.1685s
+Epoch 70 | Loss: 0.4176 | Correct: 50 | Average time per epoch: 1.1725s
+Epoch 80 | Loss: 0.3629 | Correct: 50 | Average time per epoch: 1.1709s
+Epoch 90 | Loss: 1.0943 | Correct: 48 | Average time per epoch: 1.1698s
+Epoch 100 | Loss: 0.4081 | Correct: 49 | Average time per epoch: 1.1696s
+Epoch 110 | Loss: 0.0008 | Correct: 50 | Average time per epoch: 1.1697s
+Epoch 120 | Loss: 0.0029 | Correct: 50 | Average time per epoch: 1.1689s
+Epoch 130 | Loss: 0.2554 | Correct: 50 | Average time per epoch: 1.1707s
+Epoch 140 | Loss: 0.1657 | Correct: 50 | Average time per epoch: 1.1732s
+Epoch 150 | Loss: 0.4295 | Correct: 50 | Average time per epoch: 1.1715s
+Epoch 160 | Loss: 0.3672 | Correct: 50 | Average time per epoch: 1.1728s
+Epoch 170 | Loss: 0.0002 | Correct: 50 | Average time per epoch: 1.1686s
+Epoch 180 | Loss: 0.0784 | Correct: 50 | Average time per epoch: 1.1745s
+Epoch 190 | Loss: 0.0001 | Correct: 50 | Average time per epoch: 1.1717s
 ```
 
 ### GPU
-Averaged 2.8s per epoch for this really large dataset. This is actually quite fast
+Averaged 1.77s per epoch for this really large dataset. This is actually quite fast especially since we're not fully utilizing the GPU and the major slowdown is transfer of data to the GPU
 ```console
 Epoch 0 | Loss: 45.0684 | Correct: 27 | Time since last call: NaN
-Epoch 10 | Loss: 3.1021 | Correct: 41 | Time since last call: 28.12s
-Epoch 20 | Loss: 1.0329 | Correct: 46 | Time since last call: 27.97s
-Epoch 30 | Loss: 0.0014 | Correct: 50 | Time since last call: 27.95s
-Epoch 40 | Loss: 0.0000 | Correct: 50 | Time since last call: 27.94s
-Epoch 50 | Loss: 0.0011 | Correct: 50 | Time since last call: 27.93s
-Epoch 60 | Loss: 0.0022 | Correct: 50 | Time since last call: 27.87s
-Epoch 70 | Loss: 0.0001 | Correct: 50 | Time since last call: 27.94s
-Epoch 80 | Loss: 0.0000 | Correct: 50 | Time since last call: 27.90s
-Epoch 90 | Loss: 0.0000 | Correct: 50 | Time since last call: 27.94s
-Epoch 100 | Loss: 0.0019 | Correct: 50 | Time since last call: 27.92s
-Epoch 110 | Loss: 0.0038 | Correct: 50 | Time since last call: 27.94s
-Epoch 120 | Loss: 0.0001 | Correct: 50 | Time since last call: 27.87s
-Epoch 130 | Loss: 0.0008 | Correct: 50 | Time since last call: 27.89s
-Epoch 140 | Loss: 0.0001 | Correct: 50 | Time since last call: 27.91s
-Epoch 150 | Loss: 0.0000 | Correct: 50 | Time since last call: 27.91s
-Epoch 160 | Loss: 0.0007 | Correct: 50 | Time since last call: 27.90s
-Epoch 170 | Loss: 0.0000 | Correct: 50 | Time since last call: 27.88s
-Epoch 180 | Loss: 0.0015 | Correct: 50 | Time since last call: 27.92s
-Epoch 190 | Loss: 0.0000 | Correct: 50 | Time since last call: 27.91s
+Epoch 10 | Loss: 3.1021 | Correct: 41 | Average time per epoch: 1.7718s
+Epoch 20 | Loss: 1.0329 | Correct: 46 | Average time per epoch: 1.7750s
+Epoch 30 | Loss: 0.0075 | Correct: 50 | Average time per epoch: 1.7750s
+Epoch 40 | Loss: 0.0521 | Correct: 50 | Average time per epoch: 1.7717s
+Epoch 50 | Loss: 0.0244 | Correct: 50 | Average time per epoch: 1.7733s
+Epoch 60 | Loss: 0.1336 | Correct: 50 | Average time per epoch: 1.7627s
+Epoch 70 | Loss: 0.1092 | Correct: 50 | Average time per epoch: 1.7719s
+Epoch 80 | Loss: 0.0065 | Correct: 50 | Average time per epoch: 1.7679s
+Epoch 90 | Loss: 0.0296 | Correct: 50 | Average time per epoch: 1.7740s
+Epoch 100 | Loss: 0.0075 | Correct: 50 | Average time per epoch: 1.7723s
+Epoch 110 | Loss: 0.0328 | Correct: 50 | Average time per epoch: 1.7642s
+Epoch 120 | Loss: 0.0014 | Correct: 50 | Average time per epoch: 1.7746s
+Epoch 130 | Loss: 0.0067 | Correct: 50 | Average time per epoch: 1.7726s
+Epoch 140 | Loss: 0.0479 | Correct: 50 | Average time per epoch: 1.7812s
+Epoch 150 | Loss: 0.0509 | Correct: 50 | Average time per epoch: 1.7774s
+Epoch 160 | Loss: 0.0462 | Correct: 50 | Average time per epoch: 1.7707s
+Epoch 170 | Loss: 0.0452 | Correct: 50 | Average time per epoch: 1.7645s
+Epoch 180 | Loss: 0.0534 | Correct: 50 | Average time per epoch: 1.7725s
+Epoch 190 | Loss: 0.0219 | Correct: 50 | Average time per epoch: 1.7704s
 ```
+
+### simple
+We also compared it to the simple non parallel non compiled old tensor backend on a hidden layer size of 1000. We only did 10 epochs as it is extremely ridiculously slow!! Even the 0 epoch took almost 5 minutes, the backward in particular was very very slow!! I don't want to submit a super long job to do this basic unoptimized calculation. But we can see it's a SIGNIFICANT slowdown compared to both numba and gpu, and that's the whole point of DL being heavily parallelizable and significantly sped up by parallelizing!! Also this required me create a very slow matrix multiply function in tensor_ops, but it was just an easier version to write than the fast tensor version for numba. But it takes almost 5 minutes PER EPOCH!!! This is ridiculously slow and shows how much more efficient we have written our code!
+```console
+Epoch 0 | Loss: 0.2237 | Correct: 44 | Average time per epoch: 0.0000s
+Epoch 10 | Loss: 0.0185 | Correct: 50 | Average time per epoch: 289.4307s
+```
+
 
 
 # base readme

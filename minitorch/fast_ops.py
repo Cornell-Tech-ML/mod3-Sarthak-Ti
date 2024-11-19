@@ -178,15 +178,18 @@ def tensor_map(
         strides_aligned = np.array_equal(out_strides, in_strides) and np.array_equal(
             out_shape, in_shape
         )
-        # print(strides_aligned)
+
+        # the first key idea is we check if the strides and the shapes are the same, if they are we can avoid indexing
+        # then we use prange to parallelize the loop
+        # regardless, the idea is find the index of the input, apply function and store in output
+
         # Iterate over each element in `out` in parallel
         # print(out.size)
         if strides_aligned:
-            # If strides are aligned, we can avoid indexing
+            # If strides are aligned, we can avoid indexing, simply apply the function
             for i in prange(out.size):
                 out[i] = fn(in_storage[i])
         else:
-            # raise NotImplementedError("Need to implement for Task 3.1")
             for i in prange(out.size):  # using prange for parallel looping
                 out_index = np.empty(len(out_shape), dtype=np.int32)
                 in_index = np.empty(len(in_shape), dtype=np.int32)
@@ -251,6 +254,10 @@ def tensor_zip(
             and np.array_equal(out_strides, b_strides)
         )
 
+        # exact same idea as tensor_map, we check if strides and shapes are the same, if they are we can avoid indexing
+        # and the only difference is have an a and b not just an a, so check all of those
+        # Then simply find a and b index, apply function and store in output
+
         if strides_aligned:
             # If strides are aligned, we can avoid indexing
             for i in prange(out.size):
@@ -308,34 +315,37 @@ def tensor_reduce(
         a_strides: Strides,
         reduce_dim: int,
     ) -> None:
-        # TODO: Implement for Task 3.1.
-        # raise NotImplementedError("Need to implement for Task 3.1")
-        reduce_size = a_shape[reduce_dim]
+        # a bit more complex than map and zip, but we can still parallelize it for each output
+        # this means if do .reduce() without specifying a dimension it won't actually be parallel
+        # but if we have a 100x100 tensor and do .sum(0) it will parallelize across up to 100 cpu cores!
+        # the basic ideas is we find the index of the output, then one core will fully compute that output and store it
+        # so in the 100x100 example, a core would take the first row, sum it and store it. each core does its own row
+
+        reduce_size = a_shape[reduce_dim]  # size of the dimension we are reducing
 
         assert len(out_shape) < MAX_DIMS, "out_shape must be less than MAX_DIMS"
 
-        for i in prange(len(out)):  # Parallelized loop
-            out_index = np.empty(MAX_DIMS, dtype=np.int32)
-            to_index(i, out_shape, out_index)
-            base_position = index_to_position(out_index, out_strides)
+        for i in prange(
+            len(out)
+        ):  # Parallelized loop, if output is 1 dimension doesn't actually parallelize, but if reduce along a dimension it will
+            out_index = np.empty(MAX_DIMS, dtype=np.int32)  # Index buffer for output
+            to_index(i, out_shape, out_index)  # get the index
+            base_position = index_to_position(
+                out_index, out_strides
+            )  # get the position of the value that will remain after reduction
 
             # Inner loop: use precomputed offsets for reduction
             o = index_to_position(out_index, out_strides)
-            result = out[o]  # Identity for the reduction
-            out_index[reduce_dim] = 0
-            temp_position = index_to_position(out_index, a_strides)
+            result = out[o]  # Identity for the reduction, 0 for sum, 1 for product
+            out_index[reduce_dim] = 0  # initialize to 0
+            temp_position = index_to_position(
+                out_index, a_strides
+            )  # the starting position of the values to reduce
             for s in range(reduce_size):
                 result = fn(
                     result, float(a_storage[temp_position + s * a_strides[reduce_dim]])
-                )
-            # for s in range(reduce_size):
-            #     offset = s * a_strides[reduce_dim]
-            #     result = fn(result, a_storage[base_position + offset])
-            # out_index[reduce_dim] = s
-            # a_position = index_to_position(out_index, a_strides)
-            # result = fn(result, a_storage[a_position])
+                )  # apply the function to the result and the next value and keep applying it until it's done
 
-            # Write the reduced result to the output tensor
             out[base_position] = result
 
     return njit(_reduce, parallel=True)  # type: ignore
@@ -385,6 +395,7 @@ def _tensor_matrix_multiply(
 
     """
     # these simply let us know the strides for the batch, i, j, k
+    # the i is the row, j is the column, k is the inner dimension that is shared between a and b
     a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0
     b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0
     a_i_stride = a_strides[1] if a_shape[1] > 1 else 0
@@ -395,21 +406,25 @@ def _tensor_matrix_multiply(
 
     # we have to do loops like this because we can't have index buffers
     # also parallelizing over the batch dimension doesn't speed up a large matrix multiply, only when have many batches
+    # the basic idea here is we take a batch and assign it to a core. Then each core simply computes the matrix multiply for that batch
     for b in prange(out_shape[0]):
         # now we iterate over the other dimensions, pretend we have 2 2x2 matrices
-        for i in range(out_shape[1]):
+        for i in range(out_shape[1]):  # basic matrix multiply loop
             for j in range(out_shape[2]):
                 tmp = 0.0
-                # we also calculate the indices
+                # we also calculate the indices so we don't have to do multiplies in the for loop which only allows 1 multiply
                 a_index = b * a_batch_stride + i * a_i_stride
                 b_index = b * b_batch_stride + j * b_j_stride
                 for k in range(a_shape[-1]):
                     tmp += a_storage[a_index] * b_storage[b_index]
-                    a_index += a_k_stride
+                    a_index += a_k_stride  # add the indices so we don't have to multiply, basically moves by the stride dimensions
                     b_index += b_k_stride
 
-                out_index = b * out_strides[0] + i * out_strides[1] + j * out_strides[2]
+                out_index = (
+                    b * out_strides[0] + i * out_strides[1] + j * out_strides[2]
+                )  # now find the out index and write it out
                 out[out_index] = tmp
+                # now loop and find the next element. compute the full product and move on!!
 
     return None
 
