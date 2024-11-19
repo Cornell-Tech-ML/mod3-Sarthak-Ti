@@ -212,14 +212,10 @@ class Sum(Function):
         if dim is not None:
             return a.f.add_reduce(a, int(dim.item()))
         else:
-            return a.f.add_reduce(
-                a.contiguous().view(int(operators.prod(a.shape))), 0
-            )
+            return a.f.add_reduce(a.contiguous().view(int(operators.prod(a.shape))), 0)
 
     @staticmethod
-    def backward(
-        ctx: Context, grad_output: Tensor
-    ) -> Tuple[Tensor, float]:
+    def backward(ctx: Context, grad_output: Tensor) -> Tuple[Tensor, float]:
         """Sum tensor Backward"""
         # (dim,) = ctx.saved_values
         return grad_output, 0.0

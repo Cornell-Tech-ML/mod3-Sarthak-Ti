@@ -379,7 +379,9 @@ class Tensor:
         #     return View.apply(self, self._ensure_tensor(shape))
         # else:
         #     return View.apply(self, self._ensure_tensor(shape))
-        return View.apply(self, self.make(list(shape), (len(shape),), backend=self.backend))
+        return View.apply(
+            self, self.make(list(shape), (len(shape),), backend=self.backend)
+        )
 
     def permute(self, *axes: Union[int, Tensor]) -> "Tensor":
         """Permute the dimensions of the tensor.

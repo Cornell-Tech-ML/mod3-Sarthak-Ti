@@ -2,7 +2,7 @@
   "tests": [
     {
       "name": "Style",
-      "setup": "python -m venv .venv; . .venv/bin/activate; pip3 install -qr requirements.txt; pip3 install -q pre-commit; pip3  install -U .",
+      "setup": "python -m venv .venv; . .venv/bin/activate; pip3 install -qr requirements.txt; pip3 install -q pre-commit",
       "run": ". .venv/bin/activate && pre-commit run --all",
       "input": "",
       "output": "",
