@@ -219,7 +219,7 @@ class Sum(Function):
     @staticmethod
     def backward(
         ctx: Context, grad_output: Tensor
-    ) -> Union[Tensor, float]:
+    ) -> Tuple[Tensor, float]:
         """Sum tensor Backward"""
         # (dim,) = ctx.saved_values
         return grad_output, 0.0

@@ -11,6 +11,10 @@ from hypothesis.strategies import (
     permutations,
 )
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 import minitorch
 from minitorch import Tensor, TensorBackend, TensorData, UserIndex, UserShape
 
