@@ -547,24 +547,48 @@ def _tensor_matrix_multiply(
     # then you move on to the next block and keep looping until you have fully computed every element for that block of c
     # I drew this out to fully understand the problem, but that's th ehigh level idea
 
+    # also I should note this works because we assign a single block to every portion of c and there's no overlap, which allows it to be fast!
+
+    # the i represents the row in c which corresponds to the row in a, the j represents the column in c which corresponds to the column in b
+    # but we use pi and pj as the way to move along the row an dcol of a and b respectively
+
     temp = 0  # this is the value for the thread. Since the dot product can be broken into many partial products, ekep adding to this variable in local memory
+
     for k in range(0, a_shape[2], BLOCK_DIM):
-        if i < a_shape[1] and k + pj < a_shape[2]:
+        # this is the k loop where we have to move the block shared memory down along the b dimension and right along the a dimension to tell us the true values of c by combining partial dot products
+        # we incrememt k by blockdim, because each thread covers each value in the block, so then we move to the right or down by block dim to make sure each thread reads each blocks values once
+        # first we need to grab the values from global memory and move it to shared memory for quick computation
+        # we first need to check if the thread value is within the bounds of the a matrix, since we move only to rhte right in the a matrix (because dot product is col of b * row of a, so move right in a down in b)
+        # so we check the a dimension if the thread is within the bounds in the row, but for the column we move to the right, so have to add this k value to it
+        if i < a_shape[1] and k + pj < a_shape[2]:  # check to see if it's in bounds
+            # if it is in bounds, we have to find the corresponding value from the thread in that block. Basically
             a_shared[pi, pj] = a_storage[
                 batch * a_batch_stride + i * a_strides[1] + (k + pj) * a_strides[2]
-            ]  # sometimes it's not contiguous, so need to do this!!
+            ]  # sometimes it's not contiguous, so need to even multiply the last element by the stride
         else:
-            a_shared[pi, pj] = 0
+            a_shared[pi, pj] = (
+                0  # else we add 0. Can think of padding a with zeros such that it's divisible by 32 in rows and columns
+            )
+        # now we do the same for b, but we move down in b and j represents the column in b, so the k and pi is rows. Otherwise it's the exact same
         if k + pi < b_shape[1] and j < b_shape[2]:
             b_shared[pi, pj] = b_storage[
                 batch * b_batch_stride + (k + pi) * b_strides[1] + j * b_strides[2]
             ]
         else:
             b_shared[pi, pj] = 0
+
+        # now we sync threads to make sure that the shared memory is fully loaded before we start the computation, as values for each thread can rely on the values of other threads
         cuda.syncthreads()
+
+        # now that we have leaded the memory this is exaclty the same computation as we did in the practice matrix multiply. This is just part of the product tho
         for kk in range(BLOCK_DIM):
-            temp += a_shared[pi, kk] * b_shared[kk, pj]
+            temp += (
+                a_shared[pi, kk] * b_shared[kk, pj]
+            )  # we simply accumulate the value in temp
+            # we can do this because for thread i,j we compute c[i,j] = sum(a[i,k] * b[k,j]) for all k
+            # we simply compute part of the sum each time and so we can just keep adding to the temp variable
         cuda.syncthreads()
+        # sync again after it's done because after this step we modify the shared memory again, and don't want to start modifying before all threads are done
 
     out_index = batch * out_strides[0] + i * out_strides[1] + j
     if i < out_shape[1] and j < out_shape[2]:

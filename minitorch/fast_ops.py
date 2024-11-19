@@ -384,6 +384,7 @@ def _tensor_matrix_multiply(
         None : Fills in `out`
 
     """
+    # these simply let us know the strides for the batch, i, j, k
     a_batch_stride = a_strides[0] if a_shape[0] > 1 else 0
     b_batch_stride = b_strides[0] if b_shape[0] > 1 else 0
     a_i_stride = a_strides[1] if a_shape[1] > 1 else 0
@@ -392,6 +393,8 @@ def _tensor_matrix_multiply(
     b_k_stride = b_strides[1] if b_shape[1] > 1 else 0
     # batch_max = max(a_shape[0], b_shape[0])
 
+    # we have to do loops like this because we can't have index buffers
+    # also parallelizing over the batch dimension doesn't speed up a large matrix multiply, only when have many batches
     for b in prange(out_shape[0]):
         # now we iterate over the other dimensions, pretend we have 2 2x2 matrices
         for i in range(out_shape[1]):
@@ -408,26 +411,6 @@ def _tensor_matrix_multiply(
                 out_index = b * out_strides[0] + i * out_strides[1] + j * out_strides[2]
                 out[out_index] = tmp
 
-    # TODO: Implement for Task 3.2.
-    # raise NotImplementedError("Need to implement for Task 3.2")
-
-    # let's print all elements, they seem to work as expected. Out shape is always batch x i x k assuming a is batch x i x j and b is batch x j x k
-    # a and b don't need batch dimension, 1 is added
-    # no function calls tho, so the best approach is to iterate over every output element, then loop over the things that add up to it
-    # for i in range(len(out)):
-    # then we manually calculate the index elements since we can't call index to position
-    # like we know the position of out, can break it down to i,j,k but it requires using to_index... idk
-    # i like this approach more regardless, we find each element and then parallelize that!
-    # not the most optimal but it works!
-    # inner loop then computes the dot product, then outside of the loop you write it to the output
-    # raise NotImplementedError("Need to implement for Task 3.2")
-
-    # first find the index of the element in a and b
-    # we can utilize the strides and the i value
-    # wait we can't do this approach since we will have to have some index buffer, by doing the for loop approach, those indices are your ijb values!
-
-    # temp = 0.0
-    # now we do the for loop
     return None
 
 

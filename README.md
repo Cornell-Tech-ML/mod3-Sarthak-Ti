@@ -10,7 +10,8 @@
 # Matmul speed plot
 I used code from Hashim Hayat and Justin Chiu to run this.
 
-First I compared simple ops to fast, but the scale of speeds is so far apart it's hard to see the fast compared to the slow, and it would take hours for 1024, so I only compared up to 256 size matrices
+### fast vs slow
+First I compared simple ops to fast, but the scale of speeds is so far apart it's hard to see the fast compared to the slow, and it would take hours for 1024, so I only compared up to 256 size matrices. Note that in terms of parallelization, the only part of the Fast implementation that is parallel is along the batch dimension, and we only did it with a batch size of 2. But we still see noticeable speedups because we use numba loops which are much faster than python for loops. On top of that things are compiled, so you will still see substantial improvements even with a batch size of 1. But if we have larger batch sizes it would be even faster.
 ```console
 Timing summary
 Size: 64
@@ -24,9 +25,10 @@ Size: 256
     slow: 35.43919
 ```
 
+We can also visualize it with a plot
 
-
-I also then compared Fastops to gpu, and you see a sizable speedup, especially as matrices get larger
+### gpu vs fast
+I also then compared Fastops to gpu, and you see a sizable speedup, especially as matrices get larger. This might be partially due to the way we only parallelize the fast backend over batches of which the size is 2. However, in general we would expect the GPU to get faster as we get larger, but we are both underutilizing the GPU and not fully utilizing the CPU, so we could optimize both still and it's unclear what the speedup would be, but this relatively naive implementation shows the differences that can be achieved. Also the reason gpu is slower for smaller tensors is because we have to transfer data to the GPU.
 ```console
 Timing summary
 Size: 64
@@ -45,6 +47,8 @@ Size: 1024
     fast: 3.61113
     gpu: 0.50216
 ```
+
+Here is the plots comparing them.
 
 
 The tests were performed on an Nvidia A100 80GB compared to 8 CPU core
