@@ -37,35 +37,35 @@ def default_log_fn(epoch: int, total_loss: float, correct: int, losses: Iterable
     """
     print("Epoch ", epoch, " loss ", total_loss, "correct", correct)
 
-class TimerLogger:
-    def __init__(self):
-        self.last_time = time.time()  # Initialize as None
+# class TimerLogger:
+#     def __init__(self):
+#         self.last_time = time.time()  # Initialize as None
 
-    def log(self, epoch: int, total_loss: float, correct: int, losses: Iterable[float]) -> None:
-        """Logging function for timing the training.
+#     def log(self, epoch: int, total_loss: float, correct: int, losses: Iterable[float]) -> None:
+#         """Logging function for timing the training.
 
-        Args:
-        ----
-            epoch : int
-                The current epoch number
-            total_loss : float
-                The total loss for the epoch
-            correct : int
-                The number of correct predictions
-            losses : List[float]
-                The list of losses for each epoch
+#         Args:
+#         ----
+#             epoch : int
+#                 The current epoch number
+#             total_loss : float
+#                 The total loss for the epoch
+#             correct : int
+#                 The number of correct predictions
+#             losses : List[float]
+#                 The list of losses for each epoch
 
-        Returns:
-        -------
-            None
+#         Returns:
+#         -------
+#             None
 
-        """
-        elapsed_time = time.time() - self.last_time
-        print(
-            f"Epoch {epoch} | Loss: {total_loss:.4f} | Correct: {correct} | "
-            f"Time since last call: {elapsed_time:.2f}s"
-        )
-        self.last_time = time.time()  # Update last_time
+#         """
+#         elapsed_time = time.time() - self.last_time
+#         print(
+#             f"Epoch {epoch} | Loss: {total_loss:.4f} | Correct: {correct} | "
+#             f"Time since last call: {elapsed_time:.2f}s"
+#         )
+#         self.last_time = time.time()  # Update last_time
 
 
 def RParam(*shape: int, backend: minitorch.TensorBackend) -> minitorch.Parameter:
@@ -208,12 +208,17 @@ if __name__ == "__main__":
     HIDDEN = int(args.HIDDEN)
     RATE = args.RATE
 
-    if args.TIME:
-        timer = TimerLogger()
-        FastTrain(
-            HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
-        ).train(data, RATE, log_fn=timer.log, max_epochs=args.MAX_EPOCHS)
-    else:
-        FastTrain(
-            HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
-        ).train(data, RATE, log_fn=default_log_fn, max_epochs=args.MAX_EPOCHS)
+    #commented out because pyright really hates this and I can't get it to work without changing function signatures.
+    # if args.TIME:
+    #     timer = TimerLogger()
+    #     FastTrain(
+    #         HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
+    #     ).train(data, RATE, log_fn=timer.log, max_epochs=args.MAX_EPOCHS)
+    # else:
+    #     FastTrain(
+    #         HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
+    #     ).train(data, RATE, log_fn=default_log_fn, max_epochs=args.MAX_EPOCHS)
+
+    FastTrain(
+        HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
+    ).train(data, RATE, log_fn=default_log_fn, max_epochs=args.MAX_EPOCHS)

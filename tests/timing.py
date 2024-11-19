@@ -1,7 +1,7 @@
 import minitorch
 import time
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 FastTensorBackend = minitorch.TensorBackend(minitorch.FastOps)
 GPUBackend = minitorch.TensorBackend(minitorch.SimpleOps)
@@ -57,19 +57,19 @@ if __name__ == "__main__":
 
 # now create a bar plot and then save it. th eplot should be 4 paired bars, (so 8 total bars) x value is n trials, y value is time in seconds
 
-fig, ax = plt.subplots()
-bar_width = 0.35
-bar_positions = np.arange(len(times))
-bar_positions = bar_positions * 2 * bar_width
-fast_times = [times[size]["fast"] for size in times]
-gpu_times = [times[size]["gpu"] for size in times]
-ax.bar(bar_positions, fast_times, bar_width, label="Fast")
-ax.bar(bar_positions + bar_width, gpu_times, bar_width, label="Simple")
-ax.set_xticks(bar_positions + bar_width / 2)
-ax.set_xticklabels([str(size) for size in times])
-ax.set_xlabel("Size")
-ax.set_ylabel("Time (s)")
-ax.set_title("Matrix Multiplication Timings")
-ax.legend()
-# save plot
-plt.savefig("timing_simple.png")
+# fig, ax = plt.subplots()
+# bar_width = 0.35
+# bar_positions = np.arange(len(times))
+# bar_positions = bar_positions * 2 * bar_width
+# fast_times = [times[size]["fast"] for size in times]
+# gpu_times = [times[size]["gpu"] for size in times]
+# ax.bar(bar_positions, fast_times, bar_width, label="Fast")
+# ax.bar(bar_positions + bar_width, gpu_times, bar_width, label="Simple")
+# ax.set_xticks(bar_positions + bar_width / 2)
+# ax.set_xticklabels([str(size) for size in times])
+# ax.set_xlabel("Size")
+# ax.set_ylabel("Time (s)")
+# ax.set_title("Matrix Multiplication Timings")
+# ax.legend()
+# # save plot
+# plt.savefig("timing_simple.png")

@@ -326,7 +326,7 @@ def tensor_reduce(
             temp_position = index_to_position(out_index, a_strides)
             for s in range(reduce_size):
                 result = fn(
-                    result, a_storage[temp_position + s * a_strides[reduce_dim]]
+                    result, float(a_storage[temp_position + s * a_strides[reduce_dim]])
                 )
             # for s in range(reduce_size):
             #     offset = s * a_strides[reduce_dim]
