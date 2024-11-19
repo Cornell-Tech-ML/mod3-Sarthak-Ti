@@ -2,6 +2,10 @@ import random
 
 import numba
 
+from typing import Iterable, Callable
+
+import time
+
 import minitorch
 
 datasets = minitorch.datasets
@@ -9,18 +13,73 @@ FastTensorBackend = minitorch.TensorBackend(minitorch.FastOps)
 if numba.cuda.is_available():
     GPUBackend = minitorch.TensorBackend(minitorch.CudaOps)
 
+LAST_TIME = None  # Variable to store the timestamp of the previous call
 
-def default_log_fn(epoch, total_loss, correct, losses):
+
+def default_log_fn(epoch: int, total_loss: float, correct: int, losses: Iterable[float]) -> None:
+    """Default logging function for training
+
+    Args:
+    ----
+        epoch : int
+            The current epoch number
+        total_loss : float
+            The total loss for the epoch
+        correct : int
+            The number of correct predictions
+        losses : List[float]
+            The list of losses for each epoch
+
+    Returns:
+    -------
+        None
+
+    """
     print("Epoch ", epoch, " loss ", total_loss, "correct", correct)
 
+def timer_log_fn(epoch: int, total_loss: float, correct: int, losses: Iterable[float]) -> None:
+    """Logging function for timing the training
 
-def RParam(*shape, backend):
+    Args:
+    ----
+        epoch : int
+            The current epoch number
+        total_loss : float
+            The total loss for the epoch
+        correct : int
+            The number of correct predictions
+        losses : List[float]
+            The list of losses for each epoch
+
+    Returns:
+    -------
+        None
+
+    """
+    global LAST_TIME
+
+    if LAST_TIME is not None:
+        elapsed_time = time.time() - LAST_TIME
+        print(
+            f"Epoch {epoch} | Loss: {total_loss:.4f} | Correct: {correct} | "
+            f"Time since last call: {elapsed_time:.2f}s"
+        )
+        LAST_TIME = time.time()
+    else:
+        print(
+            f"Epoch {epoch} | Loss: {total_loss:.4f} | Correct: {correct} | Time since last call: NaN"
+        )
+        LAST_TIME = time.time()
+
+
+def RParam(*shape: int, backend: minitorch.TensorBackend) -> minitorch.Parameter:
+    """Creates random parameters between -1 and 1 in the desired shape with the proper backend"""
     r = minitorch.rand(shape, backend=backend) - 0.5
     return minitorch.Parameter(r)
 
 
 class Network(minitorch.Module):
-    def __init__(self, hidden, backend):
+    def __init__(self, hidden: int, backend: minitorch.TensorBackend):
         super().__init__()
 
         # Submodules
@@ -28,13 +87,18 @@ class Network(minitorch.Module):
         self.layer2 = Linear(hidden, hidden, backend)
         self.layer3 = Linear(hidden, 1, backend)
 
-    def forward(self, x):
+    def forward(self, x: minitorch.Tensor) -> minitorch.Tensor:
+        """Forward pass of the network, should be the same as calling network(x)"""
         # TODO: Implement for Task 3.5.
-        raise NotImplementedError("Need to implement for Task 3.5")
+        # raise NotImplementedError("Need to implement for Task 3.5")
+        x = self.layer1(x).relu()
+        x = self.layer2(x).relu()
+        x = self.layer3(x).sigmoid()
+        return x
 
 
 class Linear(minitorch.Module):
-    def __init__(self, in_size, out_size, backend):
+    def __init__(self, in_size: int, out_size: int, backend: minitorch.TensorBackend):
         super().__init__()
         self.weights = RParam(in_size, out_size, backend=backend)
         s = minitorch.zeros((out_size,), backend=backend)
@@ -42,24 +106,47 @@ class Linear(minitorch.Module):
         self.bias = minitorch.Parameter(s)
         self.out_size = out_size
 
-    def forward(self, x):
+    def forward(self, x: minitorch.Tensor) -> minitorch.Tensor:
+        """Forward pass of the network, should be the same as calling network(x)"""
         # TODO: Implement for Task 3.5.
-        raise NotImplementedError("Need to implement for Task 3.5")
+        # raise NotImplementedError("Need to implement for Task 3.5")
+        #now we can simply use matmul for this
+        return (x @ self.weights.value) + self.bias.value
 
 
 class FastTrain:
-    def __init__(self, hidden_layers, backend=FastTensorBackend):
+    def __init__(self, hidden_layers: int, backend: minitorch.TensorBackend = FastTensorBackend):
         self.hidden_layers = hidden_layers
         self.model = Network(hidden_layers, backend)
         self.backend = backend
 
-    def run_one(self, x):
+    def run_one(self, x: Iterable[float]) -> minitorch.Tensor:
+        """Run the model on a single input"""
         return self.model.forward(minitorch.tensor([x], backend=self.backend))
 
-    def run_many(self, X):
+    def run_many(self, X: Iterable[Iterable[float]]) -> minitorch.Tensor:
+        """Run the model on a batch of inputs"""
         return self.model.forward(minitorch.tensor(X, backend=self.backend))
 
-    def train(self, data, learning_rate, max_epochs=500, log_fn=default_log_fn):
+    def train(self, data: minitorch.Graph, learning_rate: int, max_epochs:int=500, log_fn:Callable[[int, float, int, list], None] = default_log_fn) -> None:
+        """Function to train the model on the given data
+
+        Args:
+        ----
+            data : minitorch.Graph
+                The data to train on
+            learning_rate : int
+                The learning rate for the model
+            max_epochs : int
+                The maximum number of epochs to train
+            log_fn : Callable[[int, float, int, list], None]
+                The logging function to use
+
+        Returns:
+        -------
+            None
+
+        """
         self.model = Network(self.hidden_layers, self.backend)
         optim = minitorch.SGD(self.model.parameters(), learning_rate)
         BATCH = 10
@@ -108,6 +195,8 @@ if __name__ == "__main__":
     parser.add_argument("--BACKEND", default="cpu", help="backend mode")
     parser.add_argument("--DATASET", default="simple", help="dataset")
     parser.add_argument("--PLOT", default=False, help="dataset")
+    parser.add_argument("--TIME", action="store_true", help="Enable timing functionality.")
+    parser.add_argument("--MAX_EPOCHS", type=int, default=500, help="Maximum number of epochs to train.")
 
     args = parser.parse_args()
 
@@ -116,13 +205,18 @@ if __name__ == "__main__":
     if args.DATASET == "xor":
         data = minitorch.datasets["Xor"](PTS)
     elif args.DATASET == "simple":
-        data = minitorch.datasets["Simple"].simple(PTS)
+        data = minitorch.datasets["Simple"](PTS)
     elif args.DATASET == "split":
         data = minitorch.datasets["Split"](PTS)
 
     HIDDEN = int(args.HIDDEN)
     RATE = args.RATE
 
-    FastTrain(
-        HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
-    ).train(data, RATE)
+    if args.TIME:
+        FastTrain(
+            HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
+        ).train(data, RATE, log_fn=timer_log_fn, max_epochs=args.MAX_EPOCHS)
+    else:
+        FastTrain(
+            HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
+        ).train(data, RATE, log_fn=default_log_fn, max_epochs=args.MAX_EPOCHS)

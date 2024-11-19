@@ -306,7 +306,7 @@ if numba.cuda.is_available():
 
 
 @given(data())
-@settings(max_examples=25)
+@settings(max_examples=26)
 @pytest.mark.parametrize("fn", two_arg)
 @pytest.mark.parametrize("backend", backend_tests)
 def test_two_grad_broadcast(
@@ -377,4 +377,10 @@ def test_bmm(backend: str, data: DataObject) -> None:
         .sum(2)
         .view(D, A, C)
     )
+    if not c.is_close(c2).all().item():
+        print("c:", c)
+        print("c2:", c2)
+        print("a:", a)
+        print("b:", b)
+        print("found the error, \n \n \n \n \n \n \n \n \n")
     assert_close_tensor(c, c2)
