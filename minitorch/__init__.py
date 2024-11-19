@@ -1,3 +1,5 @@
+"""Base module for minitorch."""
+
 from .testing import MathTest, MathTestVariable  # type: ignore # noqa: F401,F403
 from .fast_ops import *  # noqa: F401,F403
 from .cuda_ops import *  # noqa: F401,F403
@@ -16,3 +18,4 @@ from .datasets import *  # noqa: F401,F403
 from .testing import *  # noqa: F401,F403
 from .optim import *  # noqa: F401,F403
 from . import fast_ops, cuda_ops  # noqa: F401,F403
+from .tensor_functions import tensor  # noqa: F401,F403

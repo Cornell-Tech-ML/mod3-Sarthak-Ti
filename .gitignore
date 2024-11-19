@@ -50,6 +50,7 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+.extra/
 
 # Translations
 *.mo
@@ -129,4 +130,6 @@ dmypy.json
 .pyre/
 *.\#*
 data/
-pyodide
+pyodide# pixi environments
+.pixi
+*.egg-info

@@ -8,7 +8,8 @@ MyModule = None
 minitorch
 
 
-def render_module_sandbox():
+def render_module_sandbox() -> None:
+    """Render the module sandbox."""
     st.write("## Sandbox for Module Trees")
 
     st.write(
