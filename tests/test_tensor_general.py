@@ -7,10 +7,9 @@ import pytest
 from hypothesis import given, settings
 from hypothesis.strategies import DataObject, data, integers, lists, permutations
 
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-
+# import sys
+# from pathlib import Path
+# sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 import minitorch
 from minitorch import MathTestVariable, Tensor, TensorBackend, grad_check
