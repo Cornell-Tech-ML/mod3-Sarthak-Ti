@@ -1,15 +1,13 @@
-import random
-from collections import defaultdict
 import minitorch
 import time
-import sys
 import numpy as np
+import matplotlib.pyplot as plt
 
 FastTensorBackend = minitorch.TensorBackend(minitorch.FastOps)
 GPUBackend = minitorch.TensorBackend(minitorch.SimpleOps)
 
 
-def run_matmul(backend: minitorch.TensorBackend, size: int=16) -> None:
+def run_matmul(backend: minitorch.TensorBackend, size: int = 16) -> minitorch.Tensor:
     batch_size = 2
 
     x = minitorch.rand((batch_size, size, size), backend=backend)
@@ -57,8 +55,7 @@ if __name__ == "__main__":
         for b, t in stimes.items():
             print(f"    {b}: {t:.5f}")
 
-#now create a bar plot and then save it. th eplot should be 4 paired bars, (so 8 total bars) x value is n trials, y value is time in seconds
-import matplotlib.pyplot as plt
+# now create a bar plot and then save it. th eplot should be 4 paired bars, (so 8 total bars) x value is n trials, y value is time in seconds
 
 fig, ax = plt.subplots()
 bar_width = 0.35
@@ -74,5 +71,5 @@ ax.set_xlabel("Size")
 ax.set_ylabel("Time (s)")
 ax.set_title("Matrix Multiplication Timings")
 ax.legend()
-#save plot
+# save plot
 plt.savefig("timing_simple.png")

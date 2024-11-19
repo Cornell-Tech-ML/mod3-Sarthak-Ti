@@ -1,6 +1,7 @@
 altair==4.2.2
 datasets==2.4.0
 embeddings==0.0.8
+matplotlib==3.9.2
 networkx==3.3
 plotly==4.14.3
 pydot==1.4.1

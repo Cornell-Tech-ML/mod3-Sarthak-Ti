@@ -37,39 +37,35 @@ def default_log_fn(epoch: int, total_loss: float, correct: int, losses: Iterable
     """
     print("Epoch ", epoch, " loss ", total_loss, "correct", correct)
 
-def timer_log_fn(epoch: int, total_loss: float, correct: int, losses: Iterable[float]) -> None:
-    """Logging function for timing the training
+class TimerLogger:
+    def __init__(self):
+        self.last_time = time.time()  # Initialize as None
 
-    Args:
-    ----
-        epoch : int
-            The current epoch number
-        total_loss : float
-            The total loss for the epoch
-        correct : int
-            The number of correct predictions
-        losses : List[float]
-            The list of losses for each epoch
+    def log(self, epoch: int, total_loss: float, correct: int, losses: Iterable[float]) -> None:
+        """Logging function for timing the training.
 
-    Returns:
-    -------
-        None
+        Args:
+        ----
+            epoch : int
+                The current epoch number
+            total_loss : float
+                The total loss for the epoch
+            correct : int
+                The number of correct predictions
+            losses : List[float]
+                The list of losses for each epoch
 
-    """
-    global LAST_TIME
+        Returns:
+        -------
+            None
 
-    if LAST_TIME is not None:
-        elapsed_time = time.time() - LAST_TIME
+        """
+        elapsed_time = time.time() - self.last_time
         print(
             f"Epoch {epoch} | Loss: {total_loss:.4f} | Correct: {correct} | "
             f"Time since last call: {elapsed_time:.2f}s"
         )
-        LAST_TIME = time.time()
-    else:
-        print(
-            f"Epoch {epoch} | Loss: {total_loss:.4f} | Correct: {correct} | Time since last call: NaN"
-        )
-        LAST_TIME = time.time()
+        self.last_time = time.time()  # Update last_time
 
 
 def RParam(*shape: int, backend: minitorch.TensorBackend) -> minitorch.Parameter:
@@ -213,9 +209,10 @@ if __name__ == "__main__":
     RATE = args.RATE
 
     if args.TIME:
+        timer = TimerLogger()
         FastTrain(
             HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend
-        ).train(data, RATE, log_fn=timer_log_fn, max_epochs=args.MAX_EPOCHS)
+        ).train(data, RATE, log_fn=timer.log, max_epochs=args.MAX_EPOCHS)
     else:
         FastTrain(
             HIDDEN, backend=FastTensorBackend if args.BACKEND != "gpu" else GPUBackend

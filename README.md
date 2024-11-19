@@ -422,6 +422,7 @@ Epoch 190 | Loss: 0.3353 | Correct: 50 | Time since last call: 19.79s
 
 ### GPU
 Averaged 2.8s per epoch for this really large dataset. This is actually quite fast
+```console
 Epoch 0 | Loss: 45.0684 | Correct: 27 | Time since last call: NaN
 Epoch 10 | Loss: 3.1021 | Correct: 41 | Time since last call: 28.12s
 Epoch 20 | Loss: 1.0329 | Correct: 46 | Time since last call: 27.97s
@@ -442,6 +443,7 @@ Epoch 160 | Loss: 0.0007 | Correct: 50 | Time since last call: 27.90s
 Epoch 170 | Loss: 0.0000 | Correct: 50 | Time since last call: 27.88s
 Epoch 180 | Loss: 0.0015 | Correct: 50 | Time since last call: 27.92s
 Epoch 190 | Loss: 0.0000 | Correct: 50 | Time since last call: 27.91s
+```
 
 
 # base readme
